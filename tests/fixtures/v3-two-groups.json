@@ -24,6 +24,6 @@
       "vllm-project/vllm#60456 in Release blockers",
       "mgoin/pingboard#1 in Release blockers"
     ],
-    "prefs": { "interval": 120, "defaultRepo": "vllm-project/vllm", "boardWidth": 371 }
+    "prefs": { "interval": 120, "repos": ["vllm-project/vllm"], "boardWidth": 371 }
   }
 }
