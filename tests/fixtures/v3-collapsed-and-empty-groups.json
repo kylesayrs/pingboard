@@ -25,6 +25,6 @@
       "vllm-project/vllm#60196 in Tracking",
       "vllm-project/vllm#60633 in Mine"
     ],
-    "prefs": { "interval": 30, "defaultRepo": "mgoin/pingboard", "boardWidth": 640 }
+    "prefs": { "interval": 30, "repos": ["mgoin/pingboard"], "boardWidth": 640 }
   }
 }

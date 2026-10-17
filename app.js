@@ -112,7 +112,7 @@ function pinKey(repo, number) {
 }
 
 function shortRef(repo, number) {
-  return repo === state.prefs.defaultRepo ? `#${number}` : `${repo}#${number}`;
+  return repo === defaultRepo() ? `#${number}` : `${repo}#${number}`;
 }
 
 /* URLs from the API end up in href / window.open; only ever follow web links. */
@@ -132,7 +132,7 @@ function parseRefs(raw) {
     let match;
     if ((match = token.match(/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/))) refs.push({ repo: match[1], number: Number(match[2]) });
     else if ((match = token.match(/^([\w.-]+\/[\w.-]+)#(\d+)$/))) refs.push({ repo: match[1], number: Number(match[2]) });
-    else if ((match = token.match(/^#?(\d+)$/))) refs.push({ repo: state.prefs.defaultRepo, number: Number(match[1]) });
+    else if ((match = token.match(/^#?(\d+)$/))) refs.push({ repo: defaultRepo(), number: Number(match[1]) });
     else return null;
   }
   return refs.length ? refs : null;
@@ -148,7 +148,7 @@ const state = {
   authError: "",
 
   board: { groups: [], pins: [] },   // pins: [{key, repo, number, group, addedAt, seen}]
-  prefs: { interval: 60, notify: false, defaultRepo: DEFAULT_REPO, boardWidth: BOARD_WIDTH, following: [] },
+  prefs: { interval: 60, notify: false, repos: [DEFAULT_REPO], boardWidth: BOARD_WIDTH, following: [] },
 
   data: new Map(),        // pin key -> PR model
   status: new Map(),      // pin key -> {at, loading, error}
@@ -177,9 +177,11 @@ function loadUserState() {
     interval: [30, 60, 120, 300].includes(prefs.interval) ? prefs.interval : 60,
     notify: Boolean(prefs.notify),
     boardWidth: Number(prefs.boardWidth) || BOARD_WIDTH,
-    defaultRepo: /^[\w.-]+\/[\w.-]+$/.test(prefs.defaultRepo || "") ? prefs.defaultRepo : DEFAULT_REPO,
+    // prefs.repos is the current shape; a lone defaultRepo is the pre-list format.
+    repos: parseRepos(Array.isArray(prefs.repos) ? prefs.repos.join(" ") : prefs.defaultRepo),
     following: parseLogins(Array.isArray(prefs.following) ? prefs.following.join(" ") : "")
   };
+  if (!state.prefs.repos.length) state.prefs.repos = [DEFAULT_REPO];
 
   state.board = cleanBoard(store.get(scopedKey("board"), null)) || { groups: [{ id: "g1", name: "Tracking", collapsed: false }], pins: [] };
   state.cursor = state.board.pins[0]?.key || null;
@@ -279,6 +281,21 @@ async function importBoard(file) {
       }
     ]
   });
+}
+
+/* Repositories the user tracks. The first is the default: bare #123 in Add PRs
+   means it, and its PRs show as just #123 on the board. */
+function parseRepos(text) {
+  const repos = [];
+  for (const token of String(text || "").split(/[\s,]+/)) {
+    if (!/^[\w.-]+\/[\w.-]+$/.test(token)) continue;
+    if (!repos.some((repo) => repo.toLowerCase() === token.toLowerCase())) repos.push(token);
+  }
+  return repos;
+}
+
+function defaultRepo() {
+  return state.prefs.repos[0] || DEFAULT_REPO;
 }
 
 /* Authors the user follows: highlighted wherever they appear, and a list in Add PRs. */
@@ -2041,8 +2058,9 @@ function openPrompt({ title, value = "", placeholder = "", submit, onSubmit }) {
 }
 
 /* Text input over a filterable list. `getItems(query)` returns
-   [{id, node}] synchronously; async sources call modal.update() when ready. */
-function openPicker({ title, placeholder, hint, tabs, getItems, onPick, onQuery, onTab }) {
+   [{id, node}] synchronously; async sources call modal.update() when ready.
+   `controls` is an extra element between the input and the tabs (if any). */
+function openPicker({ title, placeholder, hint, tabs, controls, getItems, onPick, onQuery, onTab }) {
   const list = el("div", { class: "picker-list" });
   const tabRow = el("div", { class: "tabs" });
   const modal = {
@@ -2113,6 +2131,7 @@ function openPicker({ title, placeholder, hint, tabs, getItems, onPick, onQuery,
   mountModal(modal, el("div", { class: "modal" }, [
     el("h2", { text: title }),
     input,
+    controls,
     tabs ? tabRow : null,
     list,
     el("div", { class: "modal-foot" }, [
@@ -2130,24 +2149,31 @@ function openPicker({ title, placeholder, hint, tabs, getItems, onPick, onQuery,
 const searchCache = new Map();   // query -> {at, count, nodes}
 
 function openAdd(groupId = targetGroupId()) {
-  const repo = state.prefs.defaultRepo;
-  const quick = profileFor(repo).quickLabels[0];
-  const tabs = [
-    { id: "mine", label: "Mine", q: "author:@me" },
-    { id: "assigned", label: "Assigned", q: "assignee:@me" },
-    { id: "requested", label: "Review requested", q: "user-review-requested:@me" },
-    { id: "reviewed", label: "Reviewed", q: "reviewed-by:@me" },
-    { id: "involved", label: "Involved", q: "involves:@me" },
-    { id: "following", label: "Following", q: state.prefs.following.map((login) => `author:${login}`).join(" ") },
-    ...(quick ? [{ id: "quick", label: quick, q: `label:${quick}` }] : []),
-    { id: "recent", label: "All recent", q: "" }
-  ];
   const group = state.board.groups.find((item) => item.id === groupId) || state.board.groups[0];
+  let scope = defaultRepo();   // repository the lists search; "all" spans every tracked one
+  const tabs = [];
+  const fillTabs = (modal) => {
+    const quick = scope !== "all" && profileFor(scope).quickLabels[0];
+    tabs.length = 0;
+    tabs.push(
+      { id: "mine", label: "Mine", q: "author:@me" },
+      { id: "assigned", label: "Assigned", q: "assignee:@me" },
+      { id: "requested", label: "Review requested", q: "user-review-requested:@me" },
+      { id: "reviewed", label: "Reviewed", q: "reviewed-by:@me" },
+      { id: "involved", label: "Involved", q: "involves:@me" },
+      { id: "following", label: "Following", q: state.prefs.following.map((login) => `author:${login}`).join(" ") },
+      ...(quick ? [{ id: "quick", label: quick, q: `label:${quick}` }] : []),
+      { id: "recent", label: "All recent", q: "" }
+    );
+    if (modal && !tabs.some((tab) => tab.id === modal.tab)) modal.tab = tabs[0].id;
+  };
+  fillTabs(null);
+  const placeholder = () => `Search ${scope === "all" ? "all tracked repositories" : scope}, @author, or paste PR numbers / URLs`;
   const queryFor = (modal) => {
     const tab = tabs.find((item) => item.id === modal.tab);
     // "@name" in the search box is shorthand for GitHub's author:name.
     const text = modal.query.trim().replace(/(^|\s)@([A-Za-z0-9-]+)/g, "$1author:$2");
-    return ["is:pr is:open", `repo:${repo}`, tab.q, text, "sort:updated-desc"].filter(Boolean).join(" ");
+    return ["is:pr is:open", ...(scope === "all" ? state.prefs.repos : [scope]).map((repo) => `repo:${repo}`), tab.q, text, "sort:updated-desc"].filter(Boolean).join(" ");
   };
   const nobodyFollowed = (modal) => modal.tab === "following" && !state.prefs.following.length;
   const search = async (modal) => {
@@ -2168,12 +2194,27 @@ function openAdd(groupId = targetGroupId()) {
     if (state.modal === modal) modal.update();
   };
   const searchSoon = debounce(search, 300);
+  const scopeSelect = state.prefs.repos.length > 1 ? el("select", {
+    class: "picker-scope",
+    "aria-label": "Repository to search",
+    onchange: (event) => {
+      scope = event.target.value;
+      fillTabs(modal);
+      modal.input.placeholder = placeholder();
+      search(modal);
+      modal.input.focus();
+    }
+  }, [
+    el("option", { value: "all", text: "All tracked repositories" }),
+    ...state.prefs.repos.map((repo) => el("option", { value: repo, selected: repo === scope, text: repo }))
+  ]) : null;
 
-  search(openPicker({
+  const modal = openPicker({
     title: `Add pull requests → ${group.name}`,
-    placeholder: `Search ${repo}, @author, or paste PR numbers / URLs`,
+    placeholder: placeholder(),
     hint: "Click a pull request to pin it; click again to unpin.",
     tabs,
+    controls: scopeSelect,
     onQuery: searchSoon,
     onTab: search,
     getItems(query, modal) {
@@ -2204,7 +2245,7 @@ function openAdd(groupId = targetGroupId()) {
           ref,
           node: el("div", { class: `result${pinned ? " pinned" : ""}` }, [
             el("span", { class: `rollup ${(rollup || "none").toLowerCase()}`, title: `Checks: ${(rollup || "none").toLowerCase()}` }),
-            el("span", { class: "num", text: `#${node.number}` }),
+            el("span", { class: "num", text: scope === "all" ? `${ref.repo}#${node.number}` : `#${node.number}` }),
             el("span", { class: "title-text", text: node.title }),
             el("span", { class: "tags" }, node.labels.nodes.filter((label) => profileFor(ref.repo).quickLabels.includes(label.name)).map(labelChip)),
             authorName(node.author?.login || "ghost"),
@@ -2229,7 +2270,8 @@ function openAdd(groupId = targetGroupId()) {
       else addPin(item.ref.repo, item.ref.number, group.id);
       render();
     }
-  }));
+  });
+  search(modal);
 }
 
 function openLabels(pr = cursorPR()) {
@@ -2292,7 +2334,26 @@ function openGroupPicker(pin = cursorPin()) {
 }
 
 function openSettings() {
-  const repoInput = el("input", { type: "text", value: state.prefs.defaultRepo, spellcheck: "false", onkeydown: (event) => event.key === "Enter" && save() });
+  const repos = state.prefs.repos.slice();   // working copy, written on save
+  const repoList = el("div", { class: "repo-list" });
+  const drawRepos = () => repoList.replaceChildren(...repos.map((repo, i) => el("div", { class: "repo-row" }, [
+    el("span", { class: "repo-name", text: repo }),
+    i === 0
+      ? el("span", { class: "repo-default", title: "Bare #123 means this repository, and its PRs show as #123", text: "default" })
+      : el("button", { class: "link-btn", onclick: () => { repos.splice(i, 1); repos.unshift(repo); drawRepos(); }, text: "Make default" }),
+    el("button", { class: "icon-btn", title: "Stop tracking", onclick: () => { repos.splice(i, 1); drawRepos(); }, text: "×" })
+  ])));
+  drawRepos();
+  const repoInput = el("input", { type: "text", placeholder: "owner/name", spellcheck: "false", "aria-label": "Repository to add", onkeydown: (event) => event.key === "Enter" && addRepo() });
+  const addRepo = () => {
+    const repo = repoInput.value.trim();
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return toast("Repository must look like owner/name", "error");
+    if (repos.some((item) => item.toLowerCase() === repo.toLowerCase())) return toast("Already tracking that repository", "error");
+    repos.push(repo);
+    repoInput.value = "";
+    drawRepos();
+    repoInput.focus();
+  };
   const interval = el("select", {}, [30, 60, 120, 300].map((seconds) => el("option", { value: seconds, selected: seconds === state.prefs.interval, text: seconds < 60 ? `${seconds} seconds` : `${seconds / 60} minute${seconds > 60 ? "s" : ""}` })));
   const notify = el("input", { type: "checkbox", checked: state.prefs.notify });
   const following = el("input", { type: "text", value: state.prefs.following.join(" "), placeholder: "usernames, separated by spaces", spellcheck: "false", onkeydown: (event) => event.key === "Enter" && save() });
@@ -2303,9 +2364,8 @@ function openSettings() {
     onchange: () => file.files[0] && importBoard(file.files[0])
   });
   const save = async () => {
-    const repo = repoInput.value.trim();
-    if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return toast("Default repository must look like owner/name", "error");
-    state.prefs.defaultRepo = repo;
+    if (!repos.length) return toast("Track at least one repository", "error");
+    state.prefs.repos = repos;
     state.prefs.interval = Number(interval.value);
     state.prefs.notify = notify.checked;
     state.prefs.following = parseLogins(following.value);
@@ -2318,8 +2378,15 @@ function openSettings() {
   };
   mountModal({}, el("div", { class: "modal small" }, [
     el("h2", { text: `Settings · ${state.user.login}` }),
-    el("label", { class: "field" }, ["Default repository", repoInput]),
-    el("p", { class: "muted small", text: "Used for bare PR numbers and for the Add PRs lists." }),
+    el("div", { class: "field" }, [
+      "Repositories",
+      repoList,
+      el("div", { class: "repo-add" }, [
+        repoInput,
+        el("button", { class: "btn", onclick: addRepo, text: "Add" })
+      ])
+    ]),
+    el("p", { class: "muted small", text: "The first is the default: bare #123 means it, and its PRs show as #123. Add PRs can search any one of them, or all of them at once." }),
     el("label", { class: "field" }, ["Refresh open PRs every", interval]),
     el("label", { class: "check-row" }, [notify, "Browser notification when CI finishes"]),
     el("label", { class: "field" }, ["Following", following]),

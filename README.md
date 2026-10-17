@@ -24,7 +24,7 @@ A blue dot marks a PR that changed since you last selected it. Drag rows to reor
 
 Selecting a row opens the detail pane: the status with a one-line explanation, the failing and running jobs (each links to its Buildkite job), branch freshness, reviews, labels, and the latest comments — which is where the CI bot answers `/ci` commands.
 
-**+ Add PRs** lists open pull requests in your default repository (yours, assigned, review requested, reviewed, involved, `ready`, all recent) and narrows as you type. Click to pin; pasting PR numbers or URLs works too. Type `@name` to see one author's PRs. To keep an eye on particular people, **Follow** them from a PR (or list them in Settings): their names are highlighted everywhere and Add PRs gets a **Following** list.
+**+ Add PRs** lists open pull requests (yours, assigned, review requested, reviewed, involved, `ready`, all recent) and narrows as you type. It searches one of your tracked repositories — or all of them at once, with the repository shown per result — so you can keep an eye on several projects from one board. Click to pin; pasting PR numbers or URLs works too. Type `@name` to see one author's PRs. To keep an eye on particular people, **Follow** them from a PR (or list them in Settings): their names are highlighted everywhere and Add PRs gets a **Following** list.
 
 ## Related or unrelated failures
 
@@ -55,7 +55,7 @@ Open PRs refresh every 60 seconds by default (configurable), background tabs fiv
 
 ## Other repositories
 
-`owner/repo#123` or a URL pins a PR from anywhere. Repository-specific workflow — which checks count as CI, the comment commands, the quick labels — lives in `REPO_PROFILES` at the top of `app.js`. Repositories without a profile treat every check as CI and have no CI commands.
+`owner/repo#123` or a URL pins a PR from anywhere. **Settings → Repositories** lists the ones you track: add or remove them freely, and the first is the default — bare `#123` means it, and its PRs show as `#123` while the others show their full name. Add PRs searches any one of them, or all of them together. Repository-specific workflow — which checks count as CI, the comment commands, the quick labels — lives in `REPO_PROFILES` at the top of `app.js`. Repositories without a profile treat every check as CI and have no CI commands.
 
 ## Run it
 

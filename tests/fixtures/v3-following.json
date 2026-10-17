@@ -42,7 +42,9 @@
     ],
     "prefs": {
       "interval": 60,
-      "defaultRepo": "vllm-project/vllm",
+      "repos": [
+        "vllm-project/vllm"
+      ],
       "boardWidth": 520,
       "following": [
         "alice",

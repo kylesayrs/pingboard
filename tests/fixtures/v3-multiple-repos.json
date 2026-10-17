@@ -1,0 +1,31 @@
+{
+  "description": "Multiple tracked repositories; the first is the default.",
+  "login": "pingboard-tester",
+  "localStorage": {
+    "pingboard.githubToken": "test-token",
+    "pingboard.v3.pingboard-tester.board": {
+      "groups": [
+        { "id": "g1", "name": "Tracking", "collapsed": false }
+      ],
+      "pins": [
+        { "key": "mgoin/pingboard#1", "repo": "mgoin/pingboard", "number": 1, "group": "g1", "addedAt": 1791470000000 },
+        { "key": "vllm-project/vllm#60447", "repo": "vllm-project/vllm", "number": 60447, "group": "g1", "addedAt": 1791470001000 }
+      ]
+    },
+    "pingboard.v3.pingboard-tester.prefs": {
+      "interval": 60,
+      "notify": false,
+      "repos": ["mgoin/pingboard", "vllm-project/vllm"],
+      "boardWidth": 520
+    }
+  },
+  "expect": {
+    "groups": ["Tracking"],
+    "collapsed": [],
+    "pins": [
+      "mgoin/pingboard#1 in Tracking",
+      "vllm-project/vllm#60447 in Tracking"
+    ],
+    "prefs": { "interval": 60, "repos": ["mgoin/pingboard", "vllm-project/vllm"], "boardWidth": 520 }
+  }
+}
