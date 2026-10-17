@@ -2134,6 +2134,7 @@ function openAdd(groupId = targetGroupId()) {
   const quick = profileFor(repo).quickLabels[0];
   const tabs = [
     { id: "mine", label: "Mine", q: "author:@me" },
+    { id: "assigned", label: "Assigned", q: "assignee:@me" },
     { id: "requested", label: "Review requested", q: "user-review-requested:@me" },
     { id: "reviewed", label: "Reviewed", q: "reviewed-by:@me" },
     { id: "involved", label: "Involved", q: "involves:@me" },
